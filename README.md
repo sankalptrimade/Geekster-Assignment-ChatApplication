@@ -1,4 +1,4 @@
-# Real Chat Application
+# Real Time Chat Application
 
 ### Frameworks and Language used:
  - Spring
