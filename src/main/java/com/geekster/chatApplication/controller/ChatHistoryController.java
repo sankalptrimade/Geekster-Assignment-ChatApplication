@@ -1,0 +1,88 @@
+package com.geekster.chatApplication.controller;
+
+import com.geekster.chatApplication.dao.StatusRepository;
+import com.geekster.chatApplication.dao.UserRepository;
+import com.geekster.chatApplication.model.ChatHistory;
+import com.geekster.chatApplication.model.Status;
+import com.geekster.chatApplication.model.Users;
+import com.geekster.chatApplication.service.ChatHistoryService;
+import io.micrometer.common.lang.Nullable;
+import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.sql.Timestamp;
+
+
+@RestController
+@RequestMapping(value = "api/v1/chat")
+public class ChatHistoryController {
+    @Autowired
+    StatusRepository statusRepository;
+    @Autowired
+    ChatHistoryService chatHistoryService;
+    @Autowired
+    UserRepository userRepository;
+
+    @PostMapping(value = "send-message")
+    public ResponseEntity<String> sendMessage(@RequestBody String requestData) {
+        JSONObject requestObj = new JSONObject(requestData);
+        JSONObject errorList = validateRequest(requestObj);
+        if(errorList.isEmpty()){
+            ChatHistory chat =  setChatHistory(requestObj);
+            int chat_id = chatHistoryService.saveMessage(chat);
+            return new ResponseEntity<>("Message Sent "+chat_id, HttpStatus.CREATED);
+        }else {
+            return new ResponseEntity<String>(errorList.toString(), HttpStatus.BAD_REQUEST);
+        }
+    }
+    @GetMapping(value = "/get-chat")
+    public ResponseEntity<String> getChatsByUserId(@Nullable @RequestParam int senderId){
+        JSONObject response = chatHistoryService.getChatsByUserId(senderId);
+        return new ResponseEntity<String>(response.toString(), HttpStatus.OK);
+    }
+
+    @GetMapping(value = "/get-conversations")
+    public ResponseEntity<String> getConversationBetweenTwoUsers(@RequestParam int user1, @RequestParam int user2){
+        JSONObject response = chatHistoryService.getConversations(user1, user2);
+        return new ResponseEntity<String>(response.toString(), HttpStatus.OK);
+    }
+
+    private ChatHistory setChatHistory(JSONObject requestObj) {
+        ChatHistory chat = new ChatHistory();
+        String message = requestObj.getString("message");
+        int senderId = requestObj.getInt("sender");
+        int receiverId = requestObj.getInt("receiver");
+        Users senderUserObj = userRepository.findById(senderId).get();
+        Users receiverUserObj = userRepository.findById(receiverId).get();
+        chat.setReceiver(receiverUserObj);
+        chat.setSender(senderUserObj);
+        chat.setMessage(message);
+        Status status = statusRepository.findById(1).get();
+        chat.setStatusId(status);
+        Timestamp createdDate = new Timestamp(System.currentTimeMillis());
+        chat.setCreatedDate(createdDate);
+        return chat;
+    }
+
+    private JSONObject validateRequest(JSONObject requestObj) {
+        JSONObject errorObj = new JSONObject();
+        if (!requestObj.has("sender")) {
+            errorObj.put("sender", "Missing Parameter");
+        }
+        if (!requestObj.has("receiver")) {
+            errorObj.put("receiver", "Missing Parameter");
+        }
+        if (requestObj.has("message")) {
+            String message = requestObj.getString("message");
+            if (message.isBlank() || message.isEmpty()) {
+                errorObj.put("message", "Message body cant be empty");
+            }
+        } else {
+            errorObj.put("message", "Missing Parameter");
+        }
+        return errorObj;
+    }
+}
